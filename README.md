@@ -25,9 +25,10 @@ sudo ruby spark_matrix_control.rb
 
 3. Verification Checklist
 To ensure your cluster is fully optimized for AI computing workloads, confirm the following telemetry targets:
-Target Component           Parameter                 Verified State        Industrial Purpose
-Huawei CE8875 Switch       fec mode rs               Active (Enabled)      Eliminates PAM4 signal degradation on 200G DACs.
-Huawei CE8875 Switch       wred ecn                  Queue 3 Bound         Enables early congestion notification to prevent packet loss.
-DGX Spark Nodes            MTU                       9000                  Minimizes CPU overhead for large tensor operations.
-DGX Spark Nodes            cma_roce_mode             2 (RoCEv2)            Forces hardware-level RDMA transport for data parallel tasks.
-Linux Kernel Stack         rmem_max / wmem_max       67108864 (64MB)       Prevents buffer overflows during high-throughput workloads.
+| Target Component | Parameter | Verified State | Industrial Purpose |
+|---|---|---|---|
+| Huawei CE8875 Switch | fec mode rs | Active (Enabled) | Eliminates PAM4 signal degradation on 200G DACs. |
+| Huawei CE8875 Switch | wred ecn | Queue 3 Bound | Enables early congestion notification to prevent packet loss. |
+| DGX Spark Nodes | MTU | 9000 | Minimizes CPU overhead for large tensor operations. |
+| DGX Spark Nodes | cma_roce_mode | 2 (RoCEv2) | Forces hardware-level RDMA transport for data parallel tasks. |
+| Linux Kernel Stack | rmem_max / wmem_max | 67108864 (64MB) | Prevents buffer overflows during high-throughput workloads. |
