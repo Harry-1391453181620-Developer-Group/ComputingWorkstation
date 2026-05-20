@@ -1,164 +1,191 @@
-# spark_matrix_control.rb
-# ==============================================================================
-# High-Performance AI Parallel Computing Orchestrator for MAOIDL Framework
-# Target Hardware: Huawei CE8875-24BQ8DQ, Naddod 200G DAC, 24x DGX Spark Nodes
-# Controller: ASUS Pro WS WRX90E-SAGE SE (Multi-Threaded Execution Core)
-# ==============================================================================
-
+# spark_matrix_control_v2_fixed.rb
 require 'yaml'
 require 'net/ssh'
+require 'timeout'
 
-class AIClusterController
-  attr_reader :config
+class HardenedClusterController
+  attr_reader :config, :nodes_status, :quarantined_nodes_cache
 
   def initialize(config_path)
     unless File.exist?(config_path)
-      puts "[-] ERROR: Target hardware topology configuration file missing at: #{config_path}"
+      log_error("CRITICAL: Topology metadata file missing at [#{config_path}]")
       exit 1
     end
     @config = YAML.load_file(config_path)
-    puts "[+] INIT: Topology mapped successfully. Ready to govern 24x DGX Spark computing workers."
+    @nodes_status = Thread::Queue.new
+    @quarantined_nodes_cache = [] # 引入常驻内存的隔离区缓存
+    log_info("INIT: Hardware inventory loaded. ASUS WRX90 Controller initializing concurrent control runtime.")
   end
 
-  # ============================================================================
-  # Task 1: Huawei CE8875-24BQ8DQ Switch VRP8 Hardening
-  # Optimizes down-negotiated 200G lanes over Naddod PAM4 DAC under heavy NCCL load
-  # ============================================================================
   def orchestrate_huawei_ce8875
-    switch_ip = config['cluster']['switch']['ip']
-    user = config['cluster']['switch']['username']
-    key = config['cluster']['switch']['secret_key_path']
+    switch = config['cluster']['switch']
+    log_info("SWITCH: Initiating secure handshake with Huawei CE8875 [#{switch['ip']}]...")
 
-    puts "\n[+] TASK 1: Connecting to Huawei CE8875 Backbone Switch [#{switch_ip}] via SSH..."
+    begin
+      Timeout.timeout(20) do
+        Net::SSH.start(switch['ip'], switch['username'], keys: [switch['secret_key_path']], non_interactive: true) do |ssh|
+          existing_profiles = ssh.exec!("display drop-profile")
+          if existing_profiles.include?("AI_NCCL_ECN")
+            log_warn("SWITCH: Pre-existing ECN profile detected. Merging adjustments iteratively.")
+          end
 
-    Net::SSH.start(switch_ip, user, keys: [key]) do |ssh|
-      vrp_commands = [
-        "system-view",
+          vrp_payload = [
+            "system-view",
+            "drop-profile AI_NCCL_ECN",
+            "wred ecn",
+            "color green low-limit 50 high-limit 1500 discard-percentage 10",
+            "quit",
+            "qos queue-profile AI_ROCE_QUEUE",
+            "queue 3 drop-profile AI_NCCL_ECN",
+            "quit",
+            "interface range 400GE 1/0/1 to 400GE 1/0/24",
+            "port mode 200ge",
+            "fec mode rs",
+            "qos queue-profile AI_ROCE_QUEUE",
+            "dcb pfc enable mode manual",
+            "dcb pfc priority 3",
+            "trust dscp",
+            "quit",
+            "commit",
+            "return"
+          ]
 
-        # Configure WRED profile for Explicit Congestion Notification (ECN) marking
-        "drop-profile AI_NCCL_ECN",
-        "wred ecn",
-        "color green low-limit 50 high-limit 1500 discard-percentage 10",
-        "quit",
+          log_info("SWITCH: Pushing hardware-level ECN/PFC profiles into VRP V8 run-time matrix...")
+          output = ssh.exec!(vrp_payload.join("\n"))
 
-        # Bind ECN profile to Quality of Service (QoS) Queue 3 (Dedicated RoCEv2 Lane)
-        "qos queue-profile AI_ROCE_QUEUE",
-        "queue 3 drop-profile AI_NCCL_ECN",
-        "quit",
-
-        # Batch configuration mode for the 24 downlinks paired with Naddod 200G DACs
-        "interface range 400GE 1/0/1 to 400GE 1/0/24",
-        "port mode 200ge",                 # Force port speed split to match 200G links
-        "fec mode rs",                     # CRITICAL: Lock Reed-Solomon FEC to patch PAM4 signal attenuation
-        "qos queue-profile AI_ROCE_QUEUE", # Inject ECN throttling matrix
-        "dcb pfc enable mode manual",      # Force hardware Priority-based Flow Control
-        "dcb pfc priority 3",              # Map drop-free link execution to priority class 3
-        "trust dscp",                      # Instruct VRP backplane to respect incoming PyTorch DSCP bits
-        "quit",
-
-        "commit",                          # Flush configuration array to VRP running config
-        "return"
-      ]
-
-      puts "[+] SWITCH: Injecting network profile (RS-FEC, WRED-ECN, DCB-PFC) into physical interfaces..."
-      output = ssh.exec!(vrp_commands.join("\n"))
-      puts "[SWITCH RESPONSE]:\n#{output}"
+          if output.include?("Error") || output.include?("Wrong")
+            log_error("SWITCH: Configuration rejected by VRP interpreter:\n#{output}")
+            raise "Huawei VRP Execution Failure"
+          else
+            log_info("SWITCH: Hardware parameters committed and saved successfully.")
+          end
+        end
+      end
+    rescue Timeout::Error
+      log_error("SWITCH: Telemetry timed out while waiting for Huawei CE8875 response. Aborting.")
+      exit 1
+    rescue => e
+      log_error("SWITCH: Critical failure on switch provisioning: #{e.message}")
+      exit 1
     end
-    puts "[+] TASK 1: Huawei CE8875 infrastructure safely locked into lossless AI mode."
   end
 
-  # ============================================================================
-  # Task 2: Multi-Threaded Parallel Node Inoculation
-  # Configures Linux Network Stack & Mellanox ConnectX Firmware via concurrent threads
-  # ============================================================================
   def ignite_dgx_spark_rocev2
-    puts "\n[+] TASK 2: Spawning concurrent execution threads across 24 DGX Spark instances..."
-    threads = []
+    log_info("NODES: Deploying non-blocking execution pool across 24 nodes concurrently...")
+    worker_threads = []
 
     config['cluster']['nodes'].each do |node|
-      threads << Thread.new do
+      worker_threads << Thread.new do
+        node_id = node['id']
+        node_ip = node['ip']
+
         begin
-          Net::SSH.start(node['ip'], 'root') do |ssh|
-            # Read node-specific layout data
-            iface = node['rdma_interface']
-            dev = node['mlx_device']
-            prio = node['pfc_priority']
+          Timeout.timeout(15) do
+            Net::SSH.start(node_ip, 'root', non_interactive: true, connection_timeout: 5) do |ssh|
+              iface_check = ssh.exec!("ip link show #{node['rdma_interface']}")
+              if iface_check.include?("not exist")
+                raise "Interface #{node['rdma_interface']} missing on hardware side."
+              end
 
-            # Step A: Lock Mellanox link layer priority flow control via mlnx_qos
-            # Format pattern: 8-element bitmask map corresponding to priorities 0-7
-            pfc_mask = (0..7).map { |p| p == prio ? "1" : "0" }.join(",")
-            ssh.exec!("mlnx_qos -i #{iface} --pfc #{pfc_mask}")
+              pfc_mask = (0..7).map { |p| p == node['pfc_priority'].to_i ? "1" : "0" }.join(",")
 
-            # Step B: Tune Linux network core socket ring buffers for huge 200G pipeline surges
-            ssh.exec!("sysctl -w net.core.rmem_max=67108864")
-            ssh.exec!("sysctl -w net.core.wmem_max=67108864")
-            ssh.exec!("sysctl -w net.ipv4.tcp_ecn=1")
+              # 硬化修复：持久化追加前增加换行符与强行清空重写保护
+              node_payload = [
+                "mlnx_qos -i #{node['rdma_interface']} --pfc #{pfc_mask}",
+                "sysctl -w net.core.rmem_max=67108864",
+                "sysctl -w net.core.wmem_max=67108864",
+                "sysctl -w net.ipv4.tcp_ecn=1",
+                "sysctl -w net.ipv4.udp_mem='262144 524288 1048576'",
+                "echo 1 > /sys/kernel/debug/mlx5/#{node['mlx_device']}/ecn/enable",
+                "cma_roce_mode -d #{node['mlx_device']} -p 1 -m 2",
+                "mkdir -p /etc/sysctl.d",
+                "echo '\n# MAOIDL ROCE PARAMETERS\nnet.core.rmem_max=67108864\nnet.core.wmem_max=67108864' > /etc/sysctl.d/99-maoidl-roce.conf"
+              ]
 
-            # Step C: Enable hardware-level ECN response tracking inside Mellanox firmware
-            ssh.exec!("echo 1 > /sys/kernel/debug/mlx5/#{dev}/ecn/enable")
+              exec_outputs = ssh.exec!(node_payload.join(" && "))
 
-            # Step D: Lock transport protocol layer to RoCEv2 (Force UDP Frame Encapsulation)
-            ssh.exec!("cma_roce_mode -d #{dev} -p 1 -m 2")
-
-            puts "[+] NODE DONE: [#{node['id']} @ #{node['ip']}] synced with absolute network parameters."
+              log_info("NODES: [#{node_id} @ #{node_ip}] Successfully initialized.")
+              @nodes_status << { id: node_id, ip: node_ip, status: :healthy }
+            end
           end
         rescue => e
-          puts "[-] NODE CRITICAL FAILURE: [#{node['id']}] fell out of cluster loop: #{e.message}"
+          log_warn("CIRCUIT BREAKER: [#{node_id} @ #{node_ip}] configuration quarantine triggered! Cause: #{e.message}")
+          @nodes_status << { id: node_id, ip: node_ip, status: :quarantined, error: e.message }
         end
       end
     end
 
-    # Block main thread until all 24 parallel worker threads return clean executions
-    threads.each(&:join)
-    puts "[+] TASK 2: Distributed worker node configurations completely aligned."
+    worker_threads.each(&:join)
+    evaluate_cluster_health_matrix
   end
 
-  # ============================================================================
-  # Task 3: Signal Integrity & Link Budget Diagnostics Run
-  # Checks physical layer and frame counters to eliminate frame loss
-  # ============================================================================
   def verify_fabric_health
-    puts "\n[+] TASK 3: Initiating hardware-level telemetry validation..."
+    log_info("DIAGNOSTICS: Commencing continuous telemetry polling for PAM4 CRC error evaluation...")
 
     config['cluster']['nodes'].each do |node|
-      Net::SSH.start(node['ip'], 'root') do |ssh|
-        mtu = ssh.exec!("ip link show #{node['rdma_interface']} | awk '/mtu/ {print $5}'").strip
-        speed = ssh.exec!("ethtool #{node['rdma_interface']} | grep -i 'Speed'").strip
-        pfc_rx = ssh.exec!("cat /sys/class/infiniband/#{node['mlx_device']}/ports/1/counters/rx_pause_req").strip
+      # 修复：真正实现对断路器隔离节点的无感跳过
+      if @quarantined_nodes_cache.include?(node['id'])
+        log_warn("DIAGNOSTICS: Skipping quarantined node [#{node['id']}] to prevent pipeline blocking.")
+        next
+      end
 
-        puts "================================================================="
-        puts " [Telemetry Profile] #{node['id']} (#{node['ip']})"
-        puts "  Link Negotiation : #{speed.empty? ? 'LINK DOWN' : speed.strip}"
-        puts "  MTU Configuration: #{mtu} (Required Target: 9000)"
-        puts "  PFC RX Pause Triggers: #{pfc_rx} frames"
-        if pfc_rx.to_i > 100000
-          puts "  [!] WARNING: High PFC pause frequency detected. Fine-tune WRED limits on Switch."
+      begin
+        Net::SSH.start(node['ip'], 'root', non_interactive: true, connection_timeout: 4) do |ssh|
+          mtu = ssh.exec!("ip link show #{node['rdma_interface']} | awk '/mtu/ {print $5}'").strip
+          speed = ssh.exec!("ethtool #{node['rdma_interface']} | grep -i 'Speed'").strip
+          pfc_rx = ssh.exec!("cat /sys/class/infiniband/#{node['mlx_device']}/ports/1/counters/rx_pause_req").strip
+          fec_uncorrectable = ssh.exec!("cat /sys/class/infiniband/#{node['mlx_device']}/ports/1/counters_ext/fec_uncorrectable_block_counter").strip
+
+          puts "-----------------------------------------------------------------"
+          puts "[Telemetry Report for Core Node: #{node['id']} @ #{node['ip']}]"
+          puts "  Physical Layer Negotiation : #{speed.empty? ? 'LINK DOWN' : speed.strip}"
+          puts "  Jumbo Frames Window (MTU)  : #{mtu} (Target: 9000)"
+          puts "  PFC RX Backpressure Count  : #{pfc_rx} frames"
+          puts "  FEC Uncorrectable Error Blocks: #{fec_uncorrectable}"
+
+          if fec_uncorrectable.to_i > 0
+            log_error("SIGNAL DEGRADATION: Naddod copper line on #{node['id']} is bleeding packets! Replace cable immediately.")
+          end
         end
+      rescue => e
+        log_warn("DIAGNOSTICS: Target node [#{node['id']}] unresponsive during heartbeat cycle: #{e.message}")
       end
     end
-    puts "================================================================="
-    puts "[+] TASK 3: Global link diagnosis completed."
+  end
+
+  private
+
+  def log_info(msg);  puts "[+] #{Time.now.strftime('%Y-%m-%d %H:%M:%S')} [INFO] #{msg}"; end
+  def log_warn(msg);  puts "[!] #{Time.now.strftime('%Y-%m-%d %H:%M:%S')} [WARN] #{msg}"; end
+  def log_error(msg); puts "[-] #{Time.now.strftime('%Y-%m-%d %H:%M:%S')} [FAIL] #{msg}"; end
+
+  def evaluate_cluster_health_matrix
+    healthy_count = 0
+
+    while !@nodes_status.empty?
+      node = @nodes_status.pop
+      if node[:status] == :healthy
+        healthy_count += 1
+      else
+        @quarantined_nodes_cache << node[:id]
+      end
+    end
+
+    puts "\n================================================================="
+    log_info("CLUSTER EVALUATION: Matrix configuration block completed.")
+    log_info("  Nodes Perfectly Inoculated: #{healthy_count} / #{@config['cluster']['nodes'].size}")
+
+    unless @quarantined_nodes_cache.empty?
+      log_warn("  Quarantined Nodes Present: #{@quarantined_nodes_cache.size}")
+      log_warn("PROMPT: PyTorch distributed initialization script must flag and exclude: #{@quarantined_nodes_cache.join(', ')}")
+    end
+    puts "=================================================================\n"
   end
 end
 
-# ============================================================================
-# Main Master Script Entry Sequence
-# ============================================================================
 if __FILE__ == $0
-  puts "================================================================="
-  puts "   MAOIDL DEEP LEARNING CLUSTER CONFIGURATION MANAGER            "
-  puts "================================================================="
-
-  orchestrator = AIClusterController.new('cluster_topology.yml')
-
-  # Step 1: provision network switch configurations
+  orchestrator = HardenedClusterController.new('cluster_topology.yml')
   orchestrator.orchestrate_huawei_ce8875
-
-  # Step 2: Inject RoCEv2 configurations into nodes concurrently
   orchestrator.ignite_dgx_spark_rocev2
-
-  # Step 3: Run cluster-wide connection integrity check
   orchestrator.verify_fabric_health
-
-  puts "\n[SUCCESS] Compute fabric aligned. System ready for PyTorch NCCL execution."
 end
