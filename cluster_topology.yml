@@ -1,0 +1,132 @@
+# cluster_topology.yml
+# Hardware Topology Mapping for DGX Spark Compute Matrix
+cluster:
+  controller:
+    model: "ASUS Pro WS WRX90E-SAGE SE"
+    os: "Ubuntu Linux"
+  switch:
+    ip: "192.168.1.254"
+    username: "admin"
+    secret_key_path: "~/.ssh/huawei_ce8875"
+    interconnect: "Naddod 200G QSFP56无源铜缆 (DAC)"
+  nodes:
+    - id: "dgx-spark-01"
+      ip: "192.168.1.11"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-02"
+      ip: "192.168.1.12"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-03"
+      ip: "192.168.1.13"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-04"
+      ip: "192.168.1.14"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-05"
+      ip: "192.168.1.15"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-06"
+      ip: "192.168.1.16"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-07"
+      ip: "192.168.1.17"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-08"
+      ip: "192.168.1.18"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-09"
+      ip: "192.168.1.19"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-10"
+      ip: "192.168.1.20"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-11"
+      ip: "192.168.1.21"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-12"
+      ip: "192.168.1.22"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-13"
+      ip: "192.168.1.23"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-14"
+      ip: "192.168.1.24"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-15"
+      ip: "192.168.1.25"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-16"
+      ip: "192.168.1.26"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-17"
+      ip: "192.168.1.27"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-18"
+      ip: "192.168.1.28"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-19"
+      ip: "192.168.1.29"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-20"
+      ip: "192.168.1.30"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-21"
+      ip: "192.168.1.31"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-22"
+      ip: "192.168.1.32"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-23"
+      ip: "192.168.1.33"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3
+    - id: "dgx-spark-24"
+      ip: "192.168.1.34"
+      rdma_interface: "enp1s0f0np0"
+      mlx_device: "mlx5_0"
+      pfc_priority: 3

@@ -1,0 +1,87 @@
+Ubuntu:
+JetBrains Toolbox
+CLion
+Rider
+RustRover
+RubyMine
+IntelliJ IDEA
+VSCode
+VSCode Insiders
+Git
+GitHub
+Python 3.11.9 / 3.13.2 / 3.14.3 & Anaconda
+JDK 25 / JDK 26 & JavaFX/Marven/Gradle
+Node.js
+PHP
+Ruby
+Linux .NET SDK
+CUDA
+vcpkg
+Powershell Core
+myowntools
+powershell_profile
+MySQL
+SQLite
+DB Browser
+Blendet
+RealVNC Viewer
+Codex
+Claude
+smart.docx
+Books
+Shoot
+Snakey Snake
+.exe products
+TimeYourself
+Trigonometric_Functions_Calculator
+Jungle
+PCGo
+Shoot
+TimeYourself
+Tragonometric Functions Calculater JAVA
+Geometry_Drawer
+Nix Vision
+Nix
+Raspberry_Pi_Project
+Sum_and_Product_Calculator
+Trigonometric_Functions_Calculator
+World
+PCGoBackendController
+TampermonkeyScripts
+mimalloc(install using vcpkg)
+hwloc(install using sudo apt install)
+Polars(for rust, and update littledatawashbear.py to rust and use it to wash data instead of pandas)
+Capistrano(for Ruby, and write some Ruby programms to organize web and DGX Sparks.)
+for all python versions, use: --disable-gil
+cuda-python(for python, use along with PyTorch)
+io_uring(for python, to increase speed of IO)
+for all Java versions, activate: Project Panama
+ffmpeg
+pandoc(sudo apt install pandoc)
+textlive-latex-base(sudo apt install textlive-latex-base
+lynx(web browser)
+
+
+Instructions to boost full use of harwares in Linux:
+sudo apt install -y linux-tools-generic
+sudo cpupower frequency-set -b performance
+watch -n 1 "cat /proc/cpuinfo | grep -i mhz"
+sudo systemctl enable cpupower
+sudo nvidia-smi -pm 1
+sudo nvidia-smi -lgc 2500,2500
+sudo sysctl -w vm.swappiness=0
+sudo sysctl -w vm.dirty_background_ratio=5
+sudo sysctl -w vm.dirty_ratio=10
+sudo nano /etc/default/grub
+in the file, do: GRUB_CMDLINE_LINUX_DEFAULT="quiet splash amd_iommu=on iommu=pt processor.max_cstate=1 intel_idle.max_cstate=0 pcie_aspm=performance"
+sudo update-grub
+sudo reboot
+
+
+
+Windows 11:
+VS (and attached stuff)
+Blend for VS
+Blender
+launch4j
+smart.docx
