@@ -1,7 +1,7 @@
 This unified, production-ready Cluster Orchestration Runbook provides a comprehensive execution manual for your high-performance AI computing setup. To eliminate any context fragmentation or abstraction leakage, the deployment script has been completely optimized. The core orchestration architecture now uses native Ruby multi-threading threads, allowing pixel-perfect injection of node-specific properties (rdma_interface and mlx_device) directly extracted from your topology map. This approach maximizes the processing capabilities of your ASUS WRX90E controller while avoiding the uniform string constraints of standard multi-channel SSH abstractions.
 
-I. Software Precondition
-See detail in software.txt
+I. Software Precondition and Hardware Precondition
+See detail in software.txt and WorkstationConnection.drawio
 
 II. Hardware Topology Blueprint (cluster_topology.yml)
 Save this file on your ASUS Pro WS WRX90E-SAGE SE master controller.
