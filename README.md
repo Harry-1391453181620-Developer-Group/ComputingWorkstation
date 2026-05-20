@@ -32,3 +32,6 @@ To ensure your cluster is fully optimized for AI computing workloads, confirm th
 | DGX Spark Nodes | MTU | 9000 | Minimizes CPU overhead for large tensor operations. |
 | DGX Spark Nodes | cma_roce_mode | 2 (RoCEv2) | Forces hardware-level RDMA transport for data parallel tasks. |
 | Linux Kernel Stack | rmem_max / wmem_max | 67108864 (64MB) | Prevents buffer overflows during high-throughput workloads. |
+
+
+##### Note: this project will serve for Nix Vision pro and Nix Vision Basic and Nix in the future. See more in: https://github.com/Harry-1391453181620-Developer-Group/Nix-Vision-Basic and https://github.com/Harry-1391453181620-Developer-Group/Nix and https://github.com/Harry-1391453181620-Developer-Group/Nix-Vision-Pro (Repo of Nix Vision Pro not yet exist, coming soon.)
