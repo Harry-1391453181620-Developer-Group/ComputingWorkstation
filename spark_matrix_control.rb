@@ -31,21 +31,50 @@ class HardenedClusterController
 
           vrp_payload = [
             "system-view",
+
+            # =====================================================
+            # ECN Profile
+            # =====================================================
+
             "drop-profile AI_NCCL_ECN",
             "wred ecn",
-            "color green low-limit 50 high-limit 1500 discard-percentage 10",
+            "color green low-limit 400 high-limit 4000 discard-percentage 5",
             "quit",
+
+            # =====================================================
+            # Queue Profile
+            # =====================================================
+
             "qos queue-profile AI_ROCE_QUEUE",
+
             "queue 3 drop-profile AI_NCCL_ECN",
+
+            "queue 3 scheduler wfq weight 40",
+            "queue 5 scheduler wfq weight 20",
+            "queue 1 scheduler wfq weight 10",
+
             "quit",
+
+            # =====================================================
+            # Interfaces
+            # =====================================================
+
             "interface range 400GE 1/0/1 to 400GE 1/0/24",
+
             "port mode 200ge",
+
             "fec mode rs",
-            "qos queue-profile AI_ROCE_QUEUE",
+
+            "trust dscp",
+
+            # PFC ONLY on queue 3
             "dcb pfc enable mode manual",
             "dcb pfc priority 3",
-            "trust dscp",
+
+            "qos queue-profile AI_ROCE_QUEUE",
+
             "quit",
+
             "commit",
             "return"
           ]
@@ -95,14 +124,33 @@ class HardenedClusterController
                 "sysctl -w net.core.rmem_max=67108864",
                 "sysctl -w net.core.wmem_max=67108864",
                 "sysctl -w net.ipv4.tcp_ecn=1",
+                "echo 1 > /sys/class/net/#{node['rdma_interface']}/ecn/roce_np/enable",
+                "echo 1 > /sys/class/net/#{node['rdma_interface']}/ecn/roce_rp/enable",
+                "echo 64 > /sys/class/net/#{node['rdma_interface']}/ecn/roce_rp/ai_rate",
                 "sysctl -w net.ipv4.udp_mem='262144 524288 1048576'",
                 "echo 1 > /sys/kernel/debug/mlx5/#{node['mlx_device']}/ecn/enable",
                 "cma_roce_mode -d #{node['mlx_device']} -p 1 -m 2",
                 "mkdir -p /etc/sysctl.d",
-                "echo '\n# MAOIDL ROCE PARAMETERS\nnet.core.rmem_max=67108864\nnet.core.wmem_max=67108864' > /etc/sysctl.d/99-maoidl-roce.conf"
+                "cat <<EOF > /etc/sysctl.d/99-maoidl-roce.conf
+                net.core.rmem_max=67108864
+                net.core.wmem_max=67108864
+                net.ipv4.tcp_ecn=1
+                EOF",
+                "sysctl --system"
               ]
 
-              exec_outputs = ssh.exec!(node_payload.join(" && "))
+              node_payload.each do |cmd|
+
+                output = ssh.exec!(cmd)
+
+                if output && (
+                  output.include?("Error") ||
+                    output.include?("Cannot") ||
+                    output.include?("No such file")
+                )
+                  raise "Command failed: #{cmd}"
+                end
+              end
 
               log_info("NODES: [#{node_id} @ #{node_ip}] Successfully initialized.")
               @nodes_status << { id: node_id, ip: node_ip, status: :healthy }
@@ -153,6 +201,30 @@ class HardenedClusterController
     end
   end
 
+  def validate_nccl_runtime
+
+    config['cluster']['nodes'].each do |node|
+
+      begin
+
+        Net::SSH.start(
+          node['ip'],
+          'root',
+          non_interactive: true
+        ) do |ssh|
+
+          puts ssh.exec!(
+            "all_reduce_perf -b 8 -e 1G -f 2 -g 1"
+          )
+
+        end
+
+      rescue => e
+        log_warn("NCCL validation failed on #{node['id']}: #{e.message}")
+      end
+    end
+  end
+
   private
 
   def log_info(msg);  puts "[+] #{Time.now.strftime('%Y-%m-%d %H:%M:%S')} [INFO] #{msg}"; end
@@ -187,5 +259,42 @@ if __FILE__ == $0
   orchestrator = HardenedClusterController.new('cluster_topology.yml')
   orchestrator.orchestrate_huawei_ce8875
   orchestrator.ignite_dgx_spark_rocev2
-  orchestrator.verify_fabric_health
+  orchestrator.validate_nccl_runtime
 end
+
+
+# Add proper NUMA Affinity:
+# Step one, run nvidia-smi topo -m, you will see: GPU/NIC topology abd NUMA domains.
+# Step two, find which GPU is closest to mlx5_0, mlx5_1
+# Step three, launch training with NUMA binding: numactl --cpunodebind=0 --membind=0 \
+#                                                torchrun ...
+# Step four, map GPUs to NICs
+# Step five, Set NCCL affinity variables in nccl_nardened.py
+
+
+# Add Hierarchical VLM Communication
+# Step one, inside train_backend.py, create groups: example:
+# world_size = dist.get_world_size()
+# rank = dist.get_rank()
+# Step two: define workstation ranks, example:
+# workstation_group = dist.new_group(
+#     ranks=[0,1,2]
+# )
+# Step three, define spark groups: example:
+# spark_group_1 = dist.new_group(
+#     ranks=[3,4,5,6]
+# )
+#
+# spark_group_2 = dist.new_group(
+#     ranks=[7,8,9,10]
+# )
+# Step four, reduce locally first, example:
+# dist.all_reduce(
+#     tensor,
+#     group=workstation_group
+# )
+# Step five, then global leaders synchronize.
+
+
+# How to isolate RTX 5090 from training:
+# whenever before training, do: export CUDA_VISIBLE_DEVICES=0,1,2; or add an attribute to train_backend.py, to control which hardware should be used.
